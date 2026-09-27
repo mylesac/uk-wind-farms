@@ -780,7 +780,7 @@ input[type=range]{width:100%;accent-color:var(--sea)}
   <div class="readout" id="readout">
     <h1>UK offshore wind</h1>
     <div class="stats">
-      <div class="stat"><b id="rWind">–</b><span>m/s at operating farms, hub height</span></div>
+      <div class="stat"><b id="rWind">–</b><span>mph at operating farms, hub height</span></div>
       <div class="stat"><b id="rModel">–</b><span>GW modelled offshore output</span></div>
     </div>
     <div class="when" id="rWhen">Loading wind data…</div>
@@ -807,8 +807,8 @@ input[type=range]{width:100%;accent-color:var(--sea)}
         </div>
       </div>
       <div class="legend" id="legend"></div>
-      <div class="legend-scale"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>25+ m/s</span></div>
-      <p class="note">100 m is close to turbine hub height. Most turbines start turning around 3 m/s, reach full power near 12–13 m/s, and shut down above 25 m/s.</p>
+      <div class="legend-scale"><span>0</span><span>10</span><span>20</span><span>30</span><span>40</span><span>50</span><span>60+ mph</span></div>
+      <p class="note">100 m is close to turbine hub height. Most turbines start turning around 7 mph, reach full power near 27–29 mph, and shut down above 56 mph.</p>
       <p class="status" id="wxStatus"></p>
     </div>
 
@@ -872,13 +872,15 @@ const FARMS = [
 ];
 
 /* ---------- Colour scale ---------- */
-const STOPS=[[0,[214,238,230]],[4,[140,210,192]],[8,[58,166,185]],[12,[44,111,187]],[16,[91,63,168]],[20,[161,47,143]],[25,[224,50,90]]];
-function color(s){
+const MPH=2.23694; // m/s to mph; speeds are held in m/s internally and converted for display
+const STOPS=[[0,[214,238,230]],[10,[140,210,192]],[20,[58,166,185]],[30,[44,111,187]],[40,[91,63,168]],[50,[161,47,143]],[60,[224,50,90]]]; // mph
+function color(ms){
+  const s=ms*MPH;
   if(s<=0) return STOPS[0][1];
   for(let i=1;i<STOPS.length;i++){ if(s<=STOPS[i][0]){const [a,ca]=STOPS[i-1],[b,cb]=STOPS[i],f=(s-a)/(b-a);return ca.map((c,k)=>Math.round(c+(cb[k]-c)*f));}}
   return STOPS[STOPS.length-1][1];
 }
-document.getElementById('legend').style.background='linear-gradient(90deg,'+STOPS.map(([s,c])=>`rgb(${c}) ${s/25*100}%`).join(',')+')';
+document.getElementById('legend').style.background='linear-gradient(90deg,'+STOPS.map(([s,c])=>`rgb(${c}) ${s/60*100}%`).join(',')+')';
 
 /* ---------- Map ---------- */
 const dark = matchMedia('(prefers-color-scheme: dark)').matches;
@@ -1042,15 +1044,15 @@ function updateReadout(){
   const d=new Date(times[tIdx]); const diff=tIdx-nowIdx;
   document.getElementById('rWhen').textContent=(diff===0?'Live, ':'Forecast for ')+fmtDay(d)+' '+fmtClock(d);
   if(!farmWx) return; const fi=farmWx.idx.get(times[tIdx]); if(fi==null) return;
-  const s=farmStats(fi); document.getElementById('rWind').textContent=s.speed?.toFixed(1)??'–';
+  const s=farmStats(fi); document.getElementById('rWind').textContent=s.speed!=null?(s.speed*MPH).toFixed(0):'–';
   document.getElementById('rModel').textContent=s.gw.toFixed(1);
 }
 function farmPopup(k){
   const [name,,,mw,st,note]=FARMS[k];
-  let ws='–'; if(farmWx&&times.length){const fi=farmWx.idx.get(times[tIdx]); if(fi!=null&&farmWx.spd[k][fi]!=null) ws=farmWx.spd[k][fi].toFixed(1);}
-  const cf=ws==='–'?'':` Roughly ${Math.round(powerCurve(+ws)*100)}% of rated power.`;
+  let ws='–'; if(farmWx&&times.length){const fi=farmWx.idx.get(times[tIdx]); if(fi!=null&&farmWx.spd[k][fi]!=null) ws=(farmWx.spd[k][fi]*MPH).toFixed(0);}
+  const cf=ws==='–'?'':` Roughly ${Math.round(powerCurve(+ws/MPH)*100)}% of rated power.`;
   return `<div class="pop"><h3>${name}</h3>${mw.toLocaleString()} MW, ${st==='op'?'operational':'under construction'}${note?'<br>'+note:''}
-  <div style="margin-top:8px"><span class="ws">${ws}</span> m/s at 100 m</div><span class="status">${st==='op'?cf:''}</span></div>`;
+  <div style="margin-top:8px"><span class="ws">${ws}</span> mph at 100 m</div><span class="status">${st==='op'?cf:''}</span></div>`;
 }
 
 /* ---------- Grid data (Elexon, fallback Carbon Intensity) ---------- */
@@ -1106,18 +1108,18 @@ function drawCharts(){
   const ws=windSeries(), now=Date.now();
   const lbl=[], spd=[], mod=[], meas=[]; let nowI=null;
   farmWx.times.forEach((t,i)=>{ const st=farmStats(i); const d=new Date(t);
-    lbl.push(fmtDay(d)+' '+fmtClock(d)); spd.push(st.speed!=null?+st.speed.toFixed(2):null); mod.push(+st.gw.toFixed(2)); meas.push(ws.has(t)?+ws.get(t).toFixed(2):null);
+    lbl.push(fmtDay(d)+' '+fmtClock(d)); spd.push(st.speed!=null?+(st.speed*MPH).toFixed(1):null); mod.push(+st.gw.toFixed(2)); meas.push(ws.has(t)?+ws.get(t).toFixed(2):null);
     if(t<=now) nowI=i; });
   const unit=gridMode==='mw'?'GW':'%';
   const data={labels:lbl,datasets:[
     {label:'Measured wind ('+unit+')',data:meas,borderColor:'#2C6FBB',backgroundColor:'#2C6FBB',yAxisID:'g',pointRadius:0,borderWidth:2.2,spanGaps:true},
     ...(gridMode==='mw'?[{label:'Modelled offshore (GW)',data:mod,borderColor:'#2C6FBB',borderDash:[5,4],yAxisID:'g',pointRadius:0,borderWidth:1.5}]:[]),
-    {label:'Wind at farms (m/s)',data:spd,borderColor:'#E8A700',backgroundColor:'#E8A700',yAxisID:'s',pointRadius:0,borderWidth:2}]};
+    {label:'Wind at farms (mph)',data:spd,borderColor:'#E8A700',backgroundColor:'#E8A700',yAxisID:'s',pointRadius:0,borderWidth:2}]};
   const opts={responsive:true,maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},
     plugins:{legend:{labels:{boxWidth:12,font:{size:11}}},nowLine:{index:nowI}},
     scales:{x:{ticks:{maxTicksLimit:5,maxRotation:0,font:{size:10},callback(v){return this.getLabelForValue(v).split(' ').slice(0,1).join(' ')}},grid:{color:line}},
       g:{position:'left',title:{display:true,text:unit},grid:{color:line},beginAtZero:true},
-      s:{position:'right',title:{display:true,text:'m/s'},grid:{display:false},beginAtZero:true}}};
+      s:{position:'right',title:{display:true,text:'mph'},grid:{display:false},beginAtZero:true}}};
   if(lineC) lineC.destroy(); lineC=new Chart(document.getElementById('lineChart'),{type:'line',data,options:opts,plugins:[nowLine]});
 
   const pts=[]; farmWx.times.forEach((t,i)=>{ if(meas[i]!=null&&spd[i]!=null&&t<=now) pts.push({x:spd[i],y:meas[i]}); });
@@ -1125,7 +1127,7 @@ function drawCharts(){
   if(scatC) scatC.destroy();
   scatC=new Chart(document.getElementById('scatter'),{type:'scatter',data:{datasets:[{label:'Hourly',data:pts,backgroundColor:'rgba(44,111,187,.55)',pointRadius:3}]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},
-      scales:{x:{title:{display:true,text:'Wind at farms, m/s'},grid:{color:line}},y:{title:{display:true,text:'Measured wind, '+unit},grid:{color:line},beginAtZero:true}}}});
+      scales:{x:{title:{display:true,text:'Wind at farms, mph'},grid:{color:line}},y:{title:{display:true,text:'Measured wind, '+unit},grid:{color:line},beginAtZero:true}}}});
 }
 function pearson(p){ const n=p.length; if(n<5) return null; const mx=p.reduce((a,q)=>a+q.x,0)/n,my=p.reduce((a,q)=>a+q.y,0)/n;
   let sxy=0,sx=0,sy=0; p.forEach(q=>{sxy+=(q.x-mx)*(q.y-my);sx+=(q.x-mx)**2;sy+=(q.y-my)**2;}); return sx&&sy?sxy/Math.sqrt(sx*sy):null; }
